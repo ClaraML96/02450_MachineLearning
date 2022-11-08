@@ -4,11 +4,18 @@ import sklearn.linear_model as lm
 import sys
 import torch
 import os
+import matplotlib.pyplot as plt
+import pandas as pd
+import time
 
 from toolbox_02450 import rlr_validate, train_neural_net
 
 # Costum scripts
 from load_data import load_data
+from regB_stat import regB_stat
+
+
+t1 = time.perf_counter()
 
 random.seed(42)
 
@@ -25,8 +32,8 @@ class HiddenPrints:
 # Parameters
 k1 = 10
 k2 = 10
-lambda_arr = sorted(np.append(np.power(10., range(-1,7)),np.array([55,250,600,1800])))
-h_arr = [1,2,3,4,5,10]
+lambda_arr = np.power(10., range(-1,7))
+h_arr = [1,2,3,4,5,7,10,15]
 nn_max_iter = 10000
 d_digits = 4 # number of digits after decimal point 
 
@@ -41,7 +48,9 @@ indexes=np.array(np.array_split(indexes, k1), dtype="object") # split into k1 ma
 data = np.array(data)
 
 lm_test_error = np.zeros(k1)
+opt_lambda_arr = np.zeros(k1)
 lmRegl_test_error = np.zeros(k1)
+opt_h_arr = np.zeros(k1)
 ann_test_error = np.zeros(k1)
 tmp_ann_test_error = np.zeros(len(h_arr))
 
@@ -55,9 +64,11 @@ for i in range(k1):
     y_test = data[indexes[i],0]  # ozone levels
     n_test = len(y_test) # number of testing points
 
-    # Standardize the data
-    X_train = (X_train - np.mean(X_train, axis=0))/np.std(X_train, axis=0)
-    X_test = (X_test - np.mean(X_test, axis=0))/np.std(X_test, axis=0)
+    # Standardize the data with in respect of the training set
+    mu = np.mean(X_train, axis=0)
+    sigma = np.std(X_train, axis=0)
+    X_train = (X_train - mu)/sigma
+    X_test = (X_test - mu)/sigma
 
     ## ------------------ Compute Baseline - Linear regression model ------------------  ##
     m = lm.LinearRegression(fit_intercept=True).fit(X_train, y_train)
@@ -67,13 +78,14 @@ for i in range(k1):
 
     ## -------------- Compute Linear regression with regularization factor -------------- ##
     opt_val_err, opt_lambda, mean_w_vs_lambda, train_err_vs_lambda, test_err_vs_lambda = rlr_validate(X_train, y_train, lambda_arr, k2)
+    opt_lambda_arr[i] = opt_lambda
 
     # Estimate weights for the optimal value of lambda, on entire training set
     lambdaI = opt_lambda * np.eye(M)
     lambdaI[0,0] = 0 # not regularizing the bias term
     w = np.linalg.solve(X_train.T @ X_train + lambdaI , X_train.T @ y_train)
     lmRegl_test_error[i] = round(sum(y_test-X_test @ w)/n_test,d_digits)
-    print("- Linear Reg. with regul. fact. (lambda=1e"+str(np.log10(opt_lambda))+"): " + str(lmRegl_test_error[i]))
+    print("- Linear Reg. with regul. fact. (lambda="+str(opt_lambda)+"): " + str(lmRegl_test_error[i]))
 
     ## -------------------------------- Compute ANN --------------------------------------- ##
     print("- ANN tmp : ", end="")
@@ -114,20 +126,45 @@ for i in range(k1):
 
     
     index_h_opt = np.argmin(tmp_ann_test_error)
-    h_opt = h_arr[index_h_opt]
+    opt_h_arr[i] = h_arr[index_h_opt]
     ann_test_error[i] = tmp_ann_test_error[index_h_opt]
     
-    print("\n- ANN (h_opt="+str(h_opt)+") : " + str(ann_test_error[i]))
-
-        
-
-# print(lm_test_error)
-# print(lmRegl_test_error)
-# print(ann_test_error)
+    print("\n- ANN (h_opt="+str(opt_h_arr[i])+") : " + str(ann_test_error[i]))
 
 
 
 
+# creating table 
+
+df = pd.DataFrame({
+    "Outer loop" : np.arange(1,k1+1),
+    "opt_h" : opt_h_arr.astype(int),
+    "ANN error" : ann_test_error,
+    "opt_lambda" : opt_lambda_arr,
+    "lmRegl error" : lmRegl_test_error,
+    "lm error" : lm_test_error
+})
+
+print(df.head(n=k1))
+
+# # plot table
+# fig, ax = plt.subplots()
+# ax.set_axis_off()
+# fig.tight_layout()
+# pd.plotting.table(ax,df, loc="center") 
+# plt.show()
+
+# df.to_csv("regression_B-Table.csv", index=False) # save table
+
+
+# statistics test
+regB_stat(ann_test_error,lmRegl_test_error, "ANN vs Reguralized Linear regression")
+regB_stat(ann_test_error,lm_test_error, "ANN vs Baseline")
+regB_stat(lmRegl_test_error,lm_test_error, "Reguralized Linear regression vs Baseline")
+
+
+
+print("\n\n---Time : ",time.perf_counter()-t1)
     
 
 
