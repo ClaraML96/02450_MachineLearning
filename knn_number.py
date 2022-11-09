@@ -76,7 +76,7 @@ print(df.head(n=K))
 print((100*sum(errors,0)/N))
 # Plot the classification error rate
 figure()
-plot(100*sum(errors,0)/N, '-o')
+plot(np.arange(1,L+1),100*sum(errors,0)/N, '-o')
 xlabel('Number of neighbors')
 ylabel('Classification error rate (%)')
 show()
